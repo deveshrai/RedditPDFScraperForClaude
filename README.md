@@ -1,4 +1,6 @@
-# Reddit → PDF (old.reddit.com)
+# Reddit → PDF (reddit.com old.reddit.com or RedLib Mirrors)
+
+Scrape entire Sub-Reddits into PDFs and auto-magically feed them into claude for processing. Now also supports Redlib mirrors of Reddit if you get banned from reddit/old.reddit.
 
 Tkinter app that saves old.reddit.com posts as PDFs, rendered by a real Chrome
 (print layout, like Ctrl/Cmd+P → Save as PDF).
