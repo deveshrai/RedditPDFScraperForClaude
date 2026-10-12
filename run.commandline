@@ -1,0 +1,82 @@
+#!/bin/bash
+# Reddit -> PDF command-line launcher.  Usage:  ./run.commandline SUBREDDIT [options]   (--help for all options)
+#
+# Like run.command, but for the terminal:
+#  - finds a Python 3.9+ (Homebrew / python.org builds first; Tk is not needed here)
+#  - creates/reuses the same private .venv as run.command and installs requirements.txt when it changes
+#  - installs Playwright's Chromium only if Google Chrome isn't installed
+#  - then runs cli.py with your arguments, from your current directory (so relative -o paths work)
+#  - setup chatter goes to stderr, so stdout stays clean for --list output and pipes
+#
+#  ./run.commandline --setup     only do the setup above, then exit
+# Exit codes: those of cli.py (0 ok, 1 some failed, 2 usage, 3 listing failed, 130 Ctrl-C), 4 = setup failed.
+
+# Resolve this script's real folder, following symlinks (so it can be linked into your PATH).
+SRC="${BASH_SOURCE[0]}"
+while [ -L "$SRC" ]; do
+  DIR="$(cd -P "$(dirname "$SRC")" && pwd)"
+  SRC="$(readlink "$SRC")"
+  [[ "$SRC" != /* ]] && SRC="$DIR/$SRC"
+done
+HERE="$(cd -P "$(dirname "$SRC")" && pwd)"
+
+say() { echo "$@" >&2; }
+die() { say "$@"; exit 4; }
+
+# Python >= 3.9 (the CLI doesn't need Tk, but an existing .venv built for the GUI is reused as-is)
+has_py() {
+  "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1
+}
+
+find_python() {
+  local c
+  for c in \
+    /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 \
+    /opt/homebrew/bin/python3.11 /opt/homebrew/bin/python3.10 \
+    /usr/local/bin/python3.13 /usr/local/bin/python3.12 \
+    /usr/local/bin/python3.11 /usr/local/bin/python3.10 \
+    /Library/Frameworks/Python.framework/Versions/Current/bin/python3 \
+    "$(command -v python3 2>/dev/null)"; do
+    [ -n "$c" ] && [ -x "$c" ] || continue
+    has_py "$c" && { echo "$c"; return 0; }
+  done
+  return 1
+}
+
+VPY="$HERE/.venv/bin/python"
+
+# Existing venv whose Python vanished/broke? rebuild it.
+if [ -d "$HERE/.venv" ] && ! has_py "$VPY"; then
+  say "Rebuilding .venv..."
+  rm -rf "$HERE/.venv"
+fi
+
+if [ ! -x "$VPY" ]; then
+  PY="$(find_python)" || die "No Python 3.9+ found. Install one from https://www.python.org/downloads/macos/ or with: brew install python"
+  say "Creating virtual environment with $PY ..."
+  "$PY" -m venv "$HERE/.venv" >&2 || die "Couldn't create the virtual environment."
+fi
+
+# Dependencies: only when requirements.txt is new or changed.
+REQ_HASH="$(shasum "$HERE/requirements.txt" | cut -d' ' -f1)"
+if [ "$(cat "$HERE/.venv/.req_hash" 2>/dev/null)" != "$REQ_HASH" ]; then
+  say "Installing dependencies..."
+  "$VPY" -m pip install -q --upgrade pip >&2
+  "$VPY" -m pip install -q -r "$HERE/requirements.txt" >&2 || die "pip install failed."
+  echo "$REQ_HASH" > "$HERE/.venv/.req_hash"
+fi
+
+# Browser: Google Chrome if present, otherwise Playwright's Chromium (downloaded once).
+if [ ! -d "/Applications/Google Chrome.app" ] && [ ! -d "$HOME/Applications/Google Chrome.app" ] \
+   && [ ! -f "$HERE/.venv/.chromium_installed" ]; then
+  say "Google Chrome not found - installing Playwright's Chromium (one-time)..."
+  "$VPY" -m playwright install chromium >&2 || die "Chromium install failed."
+  touch "$HERE/.venv/.chromium_installed"
+fi
+
+if [ "$1" = "--setup" ]; then
+  say "Setup complete."
+  exit 0
+fi
+
+exec "$VPY" "$HERE/cli.py" "$@"

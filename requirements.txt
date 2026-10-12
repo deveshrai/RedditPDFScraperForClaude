@@ -1,0 +1,8 @@
+# Python packages (install with:  python3 -m pip install -r requirements.txt)
+playwright>=1.44
+
+# Tkinter is NOT a pip package (the "tk" package on PyPI is an unrelated stub
+# and won't fix "No module named '_tkinter'"). It ships with Python itself.
+# With Homebrew Python 3.11 on macOS, install it with:
+#     brew install python-tk@3.11
+# (match the version to your python, e.g. python-tk@3.12 for Python 3.12)
